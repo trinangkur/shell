@@ -51,14 +51,22 @@ int main (void) {
   signal(SIGINT, SIG_IGN);
   while(1) {
     char command[255];
-    printf(" my Shell$ ");
+    printf("my Shell$ ");
     gets(command);
     int pid = fork();
     if (pid == 0)
     {
       signal(SIGINT, sighandler);
       char **args = split(command);
-      if(execvp(args[0], args) < 0) printf("Invalid Command\n");
+      if (strcmp(args[0], "cd") == 0)
+      {
+        chdir(&command[3]);
+      }
+      else
+      {
+        execvp(args[0], args);
+        printf("Invalid Command\n");
+      }
     } else
     {
       wait(&pid);
