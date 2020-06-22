@@ -5,42 +5,83 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-char * getPortion(char *command, int first,int last) {
-  char * ref = malloc(last - first + 1);
-  for (int i = first, j =0; i < last; i++, j++)
-  {
-    ref[j] = command[i];
+typedef enum {
+  false,
+  true
+} Bool;
+
+void replace_new_line(char *string) {
+  for (unsigned index = 0; string[index] != '\0'; index++) {
+    if (string[index] == '\n')
+      string[index] = '\0';
   }
-  ref[last] = 0;
-  return ref;
 }
 
-char ** seperat(int *a, char * command, int count, int length) {
-  char ** list = malloc(sizeof(char *) * (count + 1));
-  int first = 0;
-  for (int i = 0; i < count; i++)
-  {
-    list[i] = getPortion(command, first, a[i]);
-    first = a[i] + 1;
-  }
-  list[count] = NULL;
-  return list;
-}
+char **parse_command_string(char *command) {
+  char **args = malloc(sizeof(char *) * strlen(command));
+  unsigned arg_index = 0, string_index = 0;
+  Bool has_escaped = false, is_double_quote = false, is_single_quote = false;
+  args[0] = malloc(sizeof(char) * strlen(command));
 
-char ** split(char *command) {
-  int length = strlen(command);
-  int a [length];
-  int count = 0;
-  for (int i = 0; i < length; i++)
-  {
-    if (command[i] == ' ')
-    {
-      a[count] = i;
-      count ++;
+  for (unsigned index = 0; command[index] != '\0'; index++) {
+    if (has_escaped) {
+      args[arg_index][string_index++] = command[index];
+      has_escaped = false;
+      continue;
     }
+
+    if (command[index] == '\'' && !is_double_quote) {
+      is_single_quote = !is_single_quote;
+      continue;
+    }
+
+    if (command[index] == '"' && !is_single_quote) {
+      is_double_quote = !is_double_quote;
+      continue;
+    }
+
+    if (command[index] == '\\') {
+      has_escaped = true;
+      continue;
+    }
+
+    if (command[index] == ' ' && !is_double_quote && !is_single_quote) {
+      args[arg_index][string_index++] = '\0';
+      args[arg_index] = realloc(args[arg_index], sizeof(char) * string_index);
+      args[++arg_index] = malloc(sizeof(char) * strlen(command));
+      string_index = 0;
+      continue;
+    }
+
+    args[arg_index][string_index++] = command[index];
   }
-  a[count++] = length;
-  return seperat(a, command, count, length);
+
+  if (is_double_quote || is_single_quote) {
+    return NULL;
+  }
+
+  args = realloc(args, sizeof(char *) * (arg_index + 2));
+  args[arg_index + 1] = NULL;
+  return args;
+}
+
+char **get_args(char *command)
+{
+  char total_command[1000] = "\0";
+  strcpy(total_command, command);
+  char **args = parse_command_string(command);
+
+  while (args == NULL)
+  {
+    printf("dquote> ");
+    char new_line[100];
+    fgets(new_line, 100, stdin);
+    replace_new_line(new_line);
+    strcat(total_command, "\n");
+    strcat(total_command, new_line);
+    args = parse_command_string(total_command);
+  }
+  return args;
 }
 
 void sighandler(int signum) {
@@ -48,24 +89,32 @@ void sighandler(int signum) {
 }
 
 int main (void) {
+  char command[255];
+  int exit_code;
+  char cwd[100];
+  char *home = getenv("HOME");
   signal(SIGINT, SIG_IGN);
   while(1) {
-    char command[255];
-    printf("my Shell$ ");
-    gets(command);
+    getcwd(cwd, sizeof(cwd));
+    printf("\ntcs$ \033[0m(\033[0;36m%s\033[0m)-> ",  cwd);
+    fgets(command, 100, stdin);
+    replace_new_line(command);
     int pid = fork();
     if (pid == 0)
     {
       signal(SIGINT, sighandler);
-      char **args = split(command);
+      char **args = get_args(command);
       if (strcmp(args[0], "cd") == 0)
       {
-        chdir(&command[3]);
+        exit_code = chdir(args[1] == NULL ? home : args[1]);
+        if (exit_code < 0)
+          printf("\033[0;31m 'cd' cannot execute\n");
       }
       else
       {
-        execvp(args[0], args);
-        printf("Invalid Command\n");
+        exit_code = execvp(args[0], args);
+        if (exit_code == -1)
+          printf("\033[0;31mcommand not found!!\n");
       }
     } else
     {
