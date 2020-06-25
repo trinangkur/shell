@@ -43,33 +43,36 @@ void sighandler(int signum) {
   exit(1);
 }
 
+void handle_command (char **args, Dictionary *aliases, Dictionary *vars, int *exit_code) {
+  if (handle_internal_commands(args, aliases, vars, exit_code)) {
+      return;
+    }
+    *exit_code = 0;
+    int pid = fork();
+    if (pid == 0) {
+      signal(SIGINT, sighandler);
+      execvp(args[0], args);
+      handle_cmd_not_found(args[0]);
+      *exit_code = 1;
+      exit(0);
+    } else
+    {
+      wait(&pid);
+    }
+}
+
   int main (void) {
   char *command;
   int exit_code;
   Dictionary *aliases = create_dictionary();
+  Dictionary *vars = create_dictionary();
 
   signal(SIGINT, SIG_IGN);
   while(1) {
     prompt(exit_code);
     command = get_command_string(aliases);
-
-    char **args = get_args(command);
-
-
-    if (handle_internal_commands(args, aliases, &exit_code)) {
-      continue;
-    }
-
-    int pid = fork();
-    if (pid == 0) {
-      signal(SIGINT, sighandler);
-      exit_code = execvp(args[0], args);
-      printf("-->%d\n", exit_code);
-      handle_cmd_not_found(args[0]);
-    } else
-    {
-      wait(&pid);
-    }
+    char **args = get_args(command, vars);
+    handle_command(args, aliases, vars, &exit_code);
   }
   return 0;
 }

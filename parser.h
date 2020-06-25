@@ -9,7 +9,7 @@ typedef enum
 } Bool;
 
 void remove_new_line(char *string);
-char **get_args(char *command);
+char **get_args(char *command, Dictionary *vars);
 char *get_command_string(Dictionary *aliases);
 
 #endif

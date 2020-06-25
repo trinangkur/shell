@@ -4,6 +4,21 @@
 #include "dictionary.h"
 #include "parser.h"
 
+char **remove_unnecessary_arg(char **args) {
+  char **new_args = malloc(sizeof(char *) * 100);
+  unsigned new_arg_index = 0, index;
+  for (index = 0; args[index] != NULL; index++)
+  {
+    if (strcmp(args[index], "") != 0)
+      new_args[new_arg_index++] = args[index];
+    else
+      free(args[index]);
+  }
+  new_args[index] = NULL;
+  free(args);
+  return new_args;
+}
+
 void remove_new_line(char *string) {
   for (unsigned index = 0; string[index] != '\0'; index++) {
     if (string[index] == '\n')
@@ -11,59 +26,85 @@ void remove_new_line(char *string) {
   }
 }
 
-char **parse_command_string(char *command) {
-  char **args = malloc(sizeof(char *) * strlen(command));
-  unsigned arg_index = 0, string_index = 0;
-  Bool has_escaped = false, is_double_quote = false, is_single_quote = false;
-  args[0] = malloc(sizeof(char) * strlen(command));
+char *get_key(char *str) {
+  char *key = malloc(sizeof(char) * 30);
+  unsigned index;
+  for (index = 0; str[index] != ']' && str[index] != '\0'; index++)
+  {
+    key[index] = str[index];
+  }
+  key[index] = '\0';
+  return key;
+}
 
-  for (unsigned index = 0; command[index] != '\0'; index++) {
-    if (has_escaped) {
-      args[arg_index][string_index++] = command[index];
-      has_escaped = false;
+char **parse_command_string(char *command_string, Dictionary *vars) {
+  char **args = malloc(sizeof(char *) * strlen(command_string));
+  unsigned arg_num = 0, string_pos = 0;
+  Bool is_escaped = false, double_quote = false, single_quote = false;
+  args[0] = malloc(sizeof(char) * strlen(command_string));
+
+  for (unsigned index = 0; command_string[index] != '\0'; index++) {
+    if (is_escaped) {
+      args[arg_num][string_pos++] = command_string[index];
+      is_escaped = false;
       continue;
     }
 
-    if (command[index] == '\'' && !is_double_quote) {
-      is_single_quote = !is_single_quote;
+    if (command_string[index] == '\\') {
+      is_escaped = true;
       continue;
     }
 
-    if (command[index] == '"' && !is_single_quote) {
-      is_double_quote = !is_double_quote;
+    if (command_string[index] == '"' && !single_quote) {
+      double_quote = !double_quote;
       continue;
     }
 
-    if (command[index] == '\\') {
-      has_escaped = true;
+    if (command_string[index] == '\'' && !double_quote) {
+      single_quote = !single_quote;
       continue;
     }
 
-    if (command[index] == ' ' && !is_double_quote && !is_single_quote) {
-      args[arg_index][string_index++] = '\0';
-      args[arg_index] = realloc(args[arg_index], sizeof(char) * string_index);
-      args[++arg_index] = malloc(sizeof(char) * strlen(command));
-      string_index = 0;
+    if (command_string[index] == ' ' && !double_quote && !single_quote) {
+      args[arg_num][string_pos] = '\0';
+      args[arg_num] = realloc(args[arg_num], sizeof(char) * (string_pos + 1));
+      args[++arg_num] = malloc(sizeof(char) * strlen(command_string));
+      string_pos = 0;
       continue;
     }
 
-    args[arg_index][string_index++] = command[index];
+    if (command_string[index] == '[' && !double_quote && !single_quote) {
+      char *key = get_key(command_string + index + 1);
+      char *value = get_value(vars, key);
+      value == NULL && (value = "");
+      for (unsigned i = 0; value[i] != '\0'; i++) {
+        args[arg_num][string_pos++] = value[i];
+      }
+      index += strlen(key) + 1;
+      command_string[index] == '\0' && (index--);
+      continue;
+    }
+
+    args[arg_num][string_pos++] = command_string[index];
   }
 
-  if (is_double_quote || is_single_quote) {
+  args[arg_num][string_pos] = '\0';
+  args[arg_num] = realloc(args[arg_num], sizeof(char) * (string_pos + 1));
+
+  if (double_quote || single_quote) {
     return NULL;
   }
-  args[arg_index][string_index] = '\0';
-  args = realloc(args, sizeof(char *) * (arg_index + 2));
-  args[arg_index + 1] = NULL;
+  args = realloc(args, sizeof(char *) * (arg_num + 2));
+  args[arg_num + 1] = NULL;
+
   return args;
 }
 
-char **get_args(char *command)
+char **get_args(char *command, Dictionary *vars)
 {
   char total_command[1000] = "\0";
   strcpy(total_command, command);
-  char **args = parse_command_string(command);
+  char **args = parse_command_string(command, vars);
 
   while (args == NULL)
   {
@@ -73,9 +114,9 @@ char **get_args(char *command)
     remove_new_line(new_line);
     strcat(total_command, "\n");
     strcat(total_command, new_line);
-    args = parse_command_string(total_command);
+    args = parse_command_string(total_command, vars);
   }
-  return args;
+  return remove_unnecessary_arg(args);
 }
 
 char *get_first_token(char *command_string)

@@ -7,6 +7,15 @@
 #include "src.h"
 #include "util.h"
 
+int find_char(char *string, char key) {
+  for (int i = 0; string[i] != '\0'; i++) {
+    if (string[i] == key) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int is_valid_key(char *key)
 {
   return !(strstr(key, "\n") || strstr(key, " ") || strstr(key, "\t") || strstr(key, "\"") || strstr(key, "'"));
@@ -40,7 +49,22 @@ void handle_cd(char *path, int *code)
   }
 }
 
-int handle_internal_commands(char **args, Dictionary *aliases, int *code)
+void handle_var(Dictionary *vars, char** args, int *code) {
+  if (args[1] != NULL) {
+    printf("invalid format\n");
+    *code = 1;
+    return;
+  }
+  char ** key_value = splitIntoTwo(args[0], '=');
+  if (!is_valid_key(key_value[0])) {
+    printf("Invalid key. ' ', '\\t', '\\n', ''' and '\"' are not allowed.\n");
+    *code = 1;
+    return;
+  }
+  add(vars, key_value[0], key_value[1]);
+}
+
+int handle_internal_commands(char **args, Dictionary *aliases,Dictionary *vars, int *code)
 {
   if (strcmp(args[0], "cd") == 0)
     handle_cd(args[1], code);
@@ -48,6 +72,8 @@ int handle_internal_commands(char **args, Dictionary *aliases, int *code)
     handle_alias(aliases, args, code);
   else if (strcmp(args[0], "unalias") == 0)
     remove_key(aliases, args[1]);
+  else if (find_char(args[0],'='))
+    handle_var(vars,args,code);
   else
     return 0;
 
